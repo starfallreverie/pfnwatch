@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Release" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/shared/">
+    <File Path="pfnwatch/shared/ioctl.hpp" />
+  </Folder>
+  <Project Path="pfnwatch/client/client.vcxproj" Id="03eddded-ca6a-4ea6-8637-5798f3948835" />
+  <Project Path="pfnwatch/driver/driver.vcxproj" Id="d59f7487-8398-d47a-449b-5d462ce5e701">
+    <Deploy />
+  </Project>
+</Solution>
