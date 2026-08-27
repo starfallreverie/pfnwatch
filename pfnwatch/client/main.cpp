@@ -1,54 +1,5 @@
-// main.cpp
+// client/main.cpp
 #include "project/global.hpp"
-
-static std::unordered_map<unsigned long long, core::tracked_detection> g_tracked;
-
-static void merge_snapshot( const shared::ioctl::detection* snapshot, unsigned long count )
-{
-	for ( unsigned long i{ 0u }; i < count; i++ )
-	{
-		const auto& d = snapshot[ i ];
-		auto it = g_tracked.find( d.pfn );
-
-		if ( it != g_tracked.end( ) )
-		{
-			it->second.virtual_address = d.virtual_address;
-			it->second.pte_value = d.pte_value;
-			it->second.target_address = d.target_address;
-			it->second.reference_count = d.reference_count;
-			it->second.cache_type = d.cache_type;
-			it->second.total_ticks += d.tick_count;
-		}
-		else
-		{
-			g_tracked[ d.pfn ] = {
-				d.pfn,
-				d.virtual_address,
-				d.pte_value,
-				d.target_address,
-				d.reference_count,
-				d.cache_type,
-				d.tick_count
-			};
-		}
-	}
-}
-
-static std::vector<core::tracked_detection> sorted_detections( )
-{
-	std::vector<core::tracked_detection> result;
-	result.reserve( g_tracked.size( ) );
-
-	for ( const auto& [pfn, entry] : g_tracked ) {
-		result.push_back( entry );
-	}
-
-	std::sort( result.begin( ), result.end( ), [ ]( const auto& a, const auto& b ) {
-		return a.total_ticks > b.total_ticks;
-	} );
-
-	return result;
-}
 
 int main( )
 {
@@ -70,6 +21,7 @@ int main( )
 
 	g.m_reader.start( );
 
+	std::unordered_map<std::uint64_t, core::tracked_detection> tracked;
 	auto* snapshot = new shared::ioctl::detection[ 4096 ];
 	auto last_draw = ::GetTickCount64( );
 
@@ -78,8 +30,23 @@ int main( )
 		std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
 
 		const auto count = g.m_driver.read_report( snapshot, 4096u );
-		if ( count > 0u ) {
-			merge_snapshot( snapshot, count );
+		for ( std::uint32_t i{ 0u }; i < count; i++ )
+		{
+			const auto& entry = snapshot[ i ];
+			auto it = tracked.find( entry.pfn );
+
+			if ( it != tracked.end( ) )
+			{
+				it->second.virtual_address = entry.virtual_address;
+				it->second.pte_value = entry.pte_value;
+				it->second.target_address = entry.target_address;
+				it->second.reference_count = entry.reference_count;
+				it->second.cache_type = entry.cache_type;
+				it->second.total_ticks += entry.tick_count;
+			}
+			else {
+				tracked[ entry.pfn ] = { entry.pfn, entry.virtual_address, entry.pte_value, entry.target_address, entry.reference_count, entry.cache_type, entry.tick_count };
+			}
 		}
 
 		const auto now = ::GetTickCount64( );
@@ -89,16 +56,23 @@ int main( )
 
 		last_draw = now;
 
-		const auto detections = sorted_detections( );
-		if ( detections.empty( ) ) {
-			continue;
+		std::vector<core::tracked_detection> detections;
+		detections.reserve( tracked.size( ) );
+
+		for ( const auto& [pfn, entry] : tracked ) {
+			detections.push_back( entry );
 		}
 
-		g.m_console.render( detections );
+		std::sort( detections.begin( ), detections.end( ), [ ]( const auto& a, const auto& b ) { return a.total_ticks > b.total_ticks; } );
+
+		if ( !detections.empty( ) ) {
+			g.m_console.render( detections );
+		}
 	}
 
 	g.m_console.shutdown( );
-	delete[ ] snapshot;
 	g.m_driver.close( );
+	delete[ ] snapshot;
+
 	return 0;
 }

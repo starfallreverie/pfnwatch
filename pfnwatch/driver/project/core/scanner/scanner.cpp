@@ -20,6 +20,7 @@ namespace core {
 	{
 		this->m_detection_count = 0u;
 		this->m_cold_cursor = 256u;
+		::KeInitializeSpinLock( &this->m_lock );
 	}
 
 	void scanner::cleanup( )
@@ -237,6 +238,9 @@ namespace core {
 
 		const auto cache = pte_value ? static_cast< unsigned char >( ( ( pte_value >> 5ull ) & 4ull ) | ( ( pte_value >> 3ull ) & 3ull ) ) : static_cast< unsigned char >( 0xffu );
 
+		KIRQL old_irql{};
+		KeAcquireSpinLock( &this->m_lock, &old_irql );
+
 		for ( unsigned long i{ 0u }; i < this->m_detection_count; i++ )
 		{
 			if ( this->m_detections[ i ].pfn == pfn )
@@ -245,6 +249,7 @@ namespace core {
 				this->m_detections[ i ].pte_value = pte_value;
 				this->m_detections[ i ].cache_type = cache;
 				this->m_detections[ i ].tick_count++;
+				::KeReleaseSpinLock( &this->m_lock, old_irql );
 				return;
 			}
 		}
@@ -254,7 +259,9 @@ namespace core {
 			const auto new_capacity = this->m_detection_capacity ? this->m_detection_capacity * 2u : 64u;
 			auto* new_buffer = static_cast< shared::ioctl::detection* >( ::ExAllocatePool2( POOL_FLAG_NON_PAGED, new_capacity * sizeof( shared::ioctl::detection ), 'pfnw' ) );
 
-			if ( !new_buffer ) {
+			if ( !new_buffer ) 
+			{
+				::KeReleaseSpinLock( &this->m_lock, old_irql );
 				return;
 			}
 
@@ -280,6 +287,7 @@ namespace core {
 		entry.tick_count = 1u;
 
 		this->m_detection_count++;
+		::KeReleaseSpinLock( &this->m_lock, old_irql );
 	}
 
 } // namespace core

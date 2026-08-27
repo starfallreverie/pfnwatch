@@ -14,7 +14,6 @@ namespace core {
 
 		static NTSTATUS handle_assign_process( const shared::ioctl::request* input );
 		static NTSTATUS handle_read_virtual_memory( const shared::ioctl::request* input, WDFREQUEST request );
-		static NTSTATUS handle_get_detection_count( WDFREQUEST request );
 		static NTSTATUS handle_read_report( WDFREQUEST request );
 	};
 

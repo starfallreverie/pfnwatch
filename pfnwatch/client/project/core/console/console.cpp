@@ -1,28 +1,25 @@
-// project/core/console/console.cpp
+// client/project/core/console/console.cpp
 #include "../../global.hpp"
 
 namespace core {
 
-	namespace ansi {
+	static void format_flags( std::uint64_t pte, char* out, std::uint32_t length )
+	{
+		if ( !pte )
+		{
+			std::snprintf( out, length, "-" );
+			return;
+		}
 
-		constexpr auto reset = "\x1b[0m";
-		constexpr auto bold = "\x1b[1m";
-		constexpr auto dim = "\x1b[2m";
-		constexpr auto red = "\x1b[91m";
-		constexpr auto green = "\x1b[92m";
-		constexpr auto yellow = "\x1b[93m";
-		constexpr auto cyan = "\x1b[38;2;140;200;210m";
-		constexpr auto white = "\x1b[97m";
-		constexpr auto gray = "\x1b[90m";
-
-	} // namespace ansi
+		std::snprintf( out, length, "%s%s%s%s%s%s", ( pte & 1ull ) ? "P" : "-", ( pte & 2ull ) ? "|W" : "|R", ( pte & 4ull ) ? "|U" : "|K", ( pte & ( 1ull << 5 ) ) ? "|A" : "", ( pte & ( 1ull << 6 ) ) ? "|D" : "", ( pte & ( 1ull << 63 ) ) ? "|NX" : "|X" );
+	}
 
 	void console::initialize( )
 	{
 		::SetConsoleTitleA( "pfnwatch" );
 		::SetConsoleOutputCP( CP_UTF8 );
 
-		auto* handle = ::GetStdHandle( STD_OUTPUT_HANDLE );
+		const auto handle = ::GetStdHandle( STD_OUTPUT_HANDLE );
 
 		unsigned long mode{ 0u };
 		::GetConsoleMode( handle, &mode );
@@ -40,93 +37,65 @@ namespace core {
 	{
 		CONSOLE_SCREEN_BUFFER_INFO csbi{};
 		::GetConsoleScreenBufferInfo( ::GetStdHandle( STD_OUTPUT_HANDLE ), &csbi );
-		const auto max_rows = static_cast< unsigned long >( csbi.srWindow.Bottom - csbi.srWindow.Top - 5 );
+
+		const auto max_rows = static_cast< std::uint32_t >( csbi.srWindow.Bottom - csbi.srWindow.Top - 5 );
+		const auto visible = std::min( static_cast< std::uint32_t >( detections.size( ) ), max_rows );
 
 		std::printf( "\x1b[H" );
-
 		this->render_header( );
 
-		const auto visible = static_cast< unsigned long >( detections.size( ) ) < max_rows ? static_cast< unsigned long >( detections.size( ) ) : max_rows;
-		for ( unsigned long i{ 0u }; i < visible; i++ ) {
+		for ( std::uint32_t i{ 0u }; i < visible; i++ ) {
 			this->render_row( detections[ i ] );
 		}
 
 		std::printf( "\x1b[J" );
-		this->render_footer( static_cast< unsigned long >( detections.size( ) ) );
+		this->render_footer( static_cast< std::uint32_t >( detections.size( ) ) );
 	}
 
 	void console::render_header( )
 	{
 		std::printf( "\n" );
-		std::printf( "  %s%-28s %-10s %-20s %5s %7s  %-14s%s\n", ansi::dim, "target", "pfn", "kernel va", "refs", "caught", "flags", ansi::reset );
-		std::printf( "  %s%-28s %-10s %-20s %5s %7s  %-14s%s\n\n", ansi::gray, "------", "---", "---------", "----", "------", "-----", ansi::reset );
+		std::printf( "  \x1b[2m%-28s %-10s %-20s %5s %7s  %-14s\x1b[0m\n", "target", "pfn", "kernel va", "refs", "caught", "flags" );
+		std::printf( "  \x1b[90m%-28s %-10s %-20s %5s %7s  %-14s\x1b[0m\n\n", "------", "---", "---------", "----", "------", "-----" );
 	}
 
 	void console::render_row( const tracked_detection& detection )
 	{
 		char target[ 256 ]{};
-		this->resolve_target( detection, target, sizeof( target ) );
+
+		if ( !detection.target_address ) {
+			std::snprintf( target, sizeof( target ), "unknown" );
+		}
+		else
+		{
+			HMODULE module{};
+			if ( !::GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast< LPCWSTR >( detection.target_address ), &module ) ) {
+				std::snprintf( target, sizeof( target ), "0x%llx (private)", detection.target_address );
+			}
+			else
+			{
+				wchar_t path[ MAX_PATH ]{};
+				::GetModuleFileNameW( module, path, MAX_PATH );
+
+				auto* name = ::wcsrchr( path, L'\\' );
+				name = name ? name + 1 : path;
+
+				const auto offset = detection.target_address - reinterpret_cast< std::uint64_t >( module );
+				std::snprintf( target, sizeof( target ), "%ls+0x%llx", name, offset );
+			}
+		}
 
 		char flags[ 64 ]{};
-		this->format_flags( detection.pte_value, flags, sizeof( flags ) );
+		format_flags( detection.pte_value, flags, sizeof( flags ) );
 
-		const auto* color = this->tick_color( detection.total_ticks );
-		std::printf( "  %s%-28s%s %s0x%-8llx%s %s0x%016llx%s %s%5hu%s %s%7lu%s  %s%s%s\n", ansi::cyan, target, ansi::reset, ansi::gray, detection.pfn, ansi::reset, ansi::gray, detection.virtual_address, ansi::reset, ansi::dim, detection.reference_count, ansi::reset, color, detection.total_ticks, ansi::reset, ansi::dim, flags, ansi::reset );
+		const auto* color = detection.total_ticks >= 50u ? "\x1b[91m" : detection.total_ticks >= 10u ? "\x1b[93m" : "\x1b[97m";
+
+		std::printf( "  \x1b[38;2;140;200;210m%-28s\x1b[0m \x1b[90m0x%-8llx\x1b[0m \x1b[90m0x%016llx\x1b[0m \x1b[2m%5hu\x1b[0m %s%7u\x1b[0m  \x1b[2m%s\x1b[0m\n", target, detection.pfn, detection.virtual_address, detection.reference_count, color, detection.total_ticks, flags );
 	}
 
-	void console::render_footer( unsigned long count )
+	void console::render_footer( std::uint32_t count )
 	{
-		std::printf( "\n  %s%lu detection(s)%s\n", ansi::gray, count, ansi::reset );
-	}
-
-	void console::resolve_target( const tracked_detection& detection, char* out, unsigned long max_length )
-	{
-		if ( !detection.target_address )
-		{
-			::sprintf_s( out, max_length, "unknown" );
-			return;
-		}
-
-		HMODULE module{};
-		if ( !::GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-			reinterpret_cast< LPCWSTR >( detection.target_address ), &module ) )
-		{
-			::sprintf_s( out, max_length, "0x%llx (private)", detection.target_address );
-			return;
-		}
-
-		wchar_t path[ MAX_PATH ]{};
-		::GetModuleFileNameW( module, path, MAX_PATH );
-
-		auto* name = ::wcsrchr( path, L'\\' );
-		name = name ? name + 1 : path;
-
-		const auto offset = detection.target_address - reinterpret_cast< unsigned long long >( module );
-		::sprintf_s( out, max_length, "%ls+0x%llx", name, offset );
-	}
-
-	void console::format_flags( unsigned long long pte, char* out, unsigned long max_length )
-	{
-		if ( !pte )
-		{
-			::sprintf_s( out, max_length, "-" );
-			return;
-		}
-
-		::sprintf_s( out, max_length, "%s%s%s%s%s%s", ( pte & ( 1ull << 0 ) ) ? "P" : "-", ( pte & ( 1ull << 1 ) ) ? "|W" : "|R", ( pte & ( 1ull << 2 ) ) ? "|U" : "|K", ( pte & ( 1ull << 5 ) ) ? "|A" : "", ( pte & ( 1ull << 6 ) ) ? "|D" : "", ( pte & ( 1ull << 63 ) ) ? "|NX" : "|X" );
-	}
-
-	const char* console::tick_color( unsigned long ticks )
-	{
-		if ( ticks >= 50u ) {
-			return ansi::red;
-		}
-
-		if ( ticks >= 10u ) {
-			return ansi::yellow;
-		}
-
-		return ansi::white;
+		std::printf( "\n  \x1b[90m%u detection(s)\x1b[0m\n", count );
 	}
 
 } // namespace core

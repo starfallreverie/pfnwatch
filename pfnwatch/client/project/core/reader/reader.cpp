@@ -10,7 +10,7 @@ namespace core {
 
 	unsigned long __stdcall reader::routine( )
 	{
-		const auto base = reinterpret_cast< unsigned long long >( ::GetModuleHandleW( nullptr ) );
+		const auto base = reinterpret_cast< std::uintptr_t >( ::GetModuleHandleW( nullptr ) );
 
 		unsigned char buffer[ 0x1000 ];
 

@@ -14,6 +14,7 @@ namespace core {
 		shared::ioctl::detection* m_detections;
 		unsigned long m_detection_count;
 		unsigned long m_detection_capacity;
+		KSPIN_LOCK m_lock;
 
 	private:
 		void scan_kernel_ptes( );

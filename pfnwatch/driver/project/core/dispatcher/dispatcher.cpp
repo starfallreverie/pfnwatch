@@ -77,13 +77,6 @@ namespace core {
 			}
 			break;
 
-		case shared::ioctl::command::get_detection_count:
-			status = dispatcher::handle_get_detection_count( request );
-			if ( NT_SUCCESS( status ) ) {
-				return;
-			}
-			break;
-
 		case shared::ioctl::command::read_report:
 			status = dispatcher::handle_read_report( request );
 			if ( NT_SUCCESS( status ) ) {
@@ -113,7 +106,7 @@ namespace core {
 		if ( !NT_SUCCESS( status ) ) {
 			return status;
 		}
-
+		 
 		KAPC_STATE apc_state{};
 		::KeStackAttachProcess( process, &apc_state );
 
@@ -147,35 +140,28 @@ namespace core {
 		return STATUS_SUCCESS;
 	}
 
-	NTSTATUS dispatcher::handle_get_detection_count( WDFREQUEST request )
-	{
-		unsigned long* output{};
-		const auto status = ::WdfRequestRetrieveOutputBuffer( request, sizeof( unsigned long ), reinterpret_cast< void** >( &output ), nullptr );
-
-		if ( !NT_SUCCESS( status ) ) {
-			return status;
-		}
-
-		*output = g.m_scanner.m_detection_count;
-
-		::WdfRequestCompleteWithInformation( request, STATUS_SUCCESS, sizeof( unsigned long ) );
-		return STATUS_SUCCESS;
-	}
-
 	NTSTATUS dispatcher::handle_read_report( WDFREQUEST request )
 	{
 		void* output{};
-		const auto status = ::WdfRequestRetrieveOutputBuffer( request, sizeof( shared::ioctl::detection ), &output, nullptr );
+		size_t output_length{};
+		const auto status = ::WdfRequestRetrieveOutputBuffer( request, sizeof( shared::ioctl::detection ), &output, &output_length );
 
 		if ( !NT_SUCCESS( status ) ) {
 			return status;
 		}
 
-		const auto count = g.m_scanner.m_detection_count;
+		const auto max_count = static_cast< unsigned long >( output_length / sizeof( shared::ioctl::detection ) );
+
+		KIRQL old_irql{};
+		KeAcquireSpinLock( &g.m_scanner.m_lock, &old_irql );
+
+		const auto count = g.m_scanner.m_detection_count < max_count ? g.m_scanner.m_detection_count : max_count;
 		const auto size = count * sizeof( shared::ioctl::detection );
 
 		::memcpy( output, g.m_scanner.m_detections, size );
 		g.m_scanner.reset_detections( );
+
+		::KeReleaseSpinLock( &g.m_scanner.m_lock, old_irql );
 
 		::WdfRequestCompleteWithInformation( request, STATUS_SUCCESS, size );
 		return STATUS_SUCCESS;

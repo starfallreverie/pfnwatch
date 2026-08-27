@@ -1,6 +1,8 @@
 // project/global.hpp
 #pragma once
 
+#define NOMINMAX
+
 // windows
 #include <Windows.h>
 

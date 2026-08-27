@@ -1,17 +1,17 @@
-// project/console/console.hpp
+// client/project/core/console/console.hpp
 #pragma once
 
 namespace core {
 
 	struct tracked_detection
 	{
-		unsigned long long pfn;
-		unsigned long long virtual_address;
-		unsigned long long pte_value;
-		unsigned long long target_address;
-		unsigned short reference_count;
-		unsigned char cache_type;
-		unsigned long total_ticks;
+		std::uint64_t pfn;
+		std::uint64_t virtual_address;
+		std::uint64_t pte_value;
+		std::uint64_t target_address;
+		std::uint16_t reference_count;
+		std::uint8_t cache_type;
+		std::uint32_t total_ticks;
 	};
 
 	class console
@@ -24,11 +24,7 @@ namespace core {
 	private:
 		void render_header( );
 		void render_row( const tracked_detection& detection );
-		void render_footer( unsigned long count );
-
-		void resolve_target( const tracked_detection& detection, char* out, unsigned long max_length );
-		void format_flags( unsigned long long pte, char* out, unsigned long max_length );
-		const char* tick_color( unsigned long ticks );
+		void render_footer( std::uint32_t count );
 	};
 
 } // namespace core

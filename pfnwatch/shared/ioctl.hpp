@@ -14,8 +14,7 @@ namespace shared::ioctl {
 	{
 		assign_process = CTL_CODE( 0x8000, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS ),
 		read_virtual_memory = CTL_CODE( 0x8000, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS ),
-		get_detection_count = CTL_CODE( 0x8000, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS ),
-		read_report = CTL_CODE( 0x8000, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS ),
+		read_report = CTL_CODE( 0x8000, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS ),
 	};
 
 	struct request
