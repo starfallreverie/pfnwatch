@@ -106,7 +106,7 @@ namespace core {
 		if ( !NT_SUCCESS( status ) ) {
 			return status;
 		}
-		 
+
 		KAPC_STATE apc_state{};
 		::KeStackAttachProcess( process, &apc_state );
 

@@ -259,7 +259,7 @@ namespace core {
 			const auto new_capacity = this->m_detection_capacity ? this->m_detection_capacity * 2u : 64u;
 			auto* new_buffer = static_cast< shared::ioctl::detection* >( ::ExAllocatePool2( POOL_FLAG_NON_PAGED, new_capacity * sizeof( shared::ioctl::detection ), 'pfnw' ) );
 
-			if ( !new_buffer ) 
+			if ( !new_buffer )
 			{
 				::KeReleaseSpinLock( &this->m_lock, old_irql );
 				return;
